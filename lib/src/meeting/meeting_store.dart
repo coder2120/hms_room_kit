@@ -82,6 +82,9 @@ class MeetingStore extends ChangeNotifier
 
   bool isScreenShareOn = false;
 
+  /// Spedia Uni: we muted the local camera when screen share started; restore on stop.
+  bool _restoreLocalVideoAfterScreenShare = false;
+
   BuildContext? screenshareContext;
 
   bool reconnecting = false;
@@ -600,6 +603,41 @@ class MeetingStore extends ChangeNotifier
 
   void changeTrackState(HMSTrack track, bool mute) {
     return _hmsSDKInteractor.changeTrackState(track, mute, this);
+  }
+
+  /// Spedia Uni: mute local camera after screen share starts to reduce encode/uplink.
+  Future<void> _muteLocalVideoForScreenShare() async {
+    try {
+      final peer = await getLocalPeer();
+      final track = peer?.videoTrack;
+      if (track != null && !track.isMute) {
+        _restoreLocalVideoAfterScreenShare = true;
+        changeTrackState(track, true);
+        isVideoOn = false;
+        notifyListeners();
+      }
+    } catch (e, st) {
+      log('_muteLocalVideoForScreenShare: $e', stackTrace: st);
+    }
+  }
+
+  /// Spedia Uni: turn camera back on after screen share if we auto-muted it.
+  Future<void> _restoreLocalVideoAfterScreenShareIfNeeded() async {
+    if (!_restoreLocalVideoAfterScreenShare) {
+      return;
+    }
+    _restoreLocalVideoAfterScreenShare = false;
+    try {
+      final peer = await getLocalPeer();
+      final track = peer?.videoTrack;
+      if (track != null && track.isMute) {
+        changeTrackState(track, false);
+        isVideoOn = true;
+        notifyListeners();
+      }
+    } catch (e, st) {
+      log('_restoreLocalVideoAfterScreenShareIfNeeded: $e', stackTrace: st);
+    }
   }
 
   Future<HMSLocalPeer?> getLocalPeer() async {
@@ -3163,11 +3201,13 @@ class MeetingStore extends ChangeNotifier
       case HMSActionResultListenerMethod.startScreenShare:
         Utilities.showToast("Screen Share Started");
         isScreenShareActive();
+        unawaited(_muteLocalVideoForScreenShare());
         break;
 
       case HMSActionResultListenerMethod.stopScreenShare:
         Utilities.showToast("Screen Share Stopped");
         isScreenShareActive();
+        unawaited(_restoreLocalVideoAfterScreenShareIfNeeded());
         break;
       case HMSActionResultListenerMethod.startAudioShare:
         Utilities.showToast("Audio Share Started");
