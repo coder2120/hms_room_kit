@@ -189,6 +189,7 @@ class _ScreenControllerState extends State<ScreenController> {
     } catch (e) {
       debugPrint('[ScreenController] Exception in _getAuthTokenAndSetLayout: $e');
       if (mounted) {
+        setState(() => isLoading = false);
         showGeneralDialog(
           context: context,
           pageBuilder: (_, data, __) {
@@ -212,6 +213,7 @@ class _ScreenControllerState extends State<ScreenController> {
     ///with the error message and description
     if (ans != null && mounted) {
       debugPrint('[ScreenController] Auth/layout failed: ${ans.code} - ${ans.message}');
+      setState(() => isLoading = false);
       showGeneralDialog(
         context: context,
         pageBuilder: (_, data, __) {
